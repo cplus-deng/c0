@@ -1,6 +1,6 @@
 #pragma once
-#ifndef LEXICAL_ANALYZER_H
-#define LEXICAL_ANALYZER_H
+#ifndef LEXICAL_ANALYZER__H
+#define LEXICAL_ANALYZER__H
 #include <fstream>
 #include <string>
 #include "type.h"
@@ -31,6 +31,7 @@ private:
     SymbolType symbolType;          // 新符号的类型
     union Token {                   // 新符号的内容，使用联合类型是因为不同符号的类型不同
         int number;         // 整数型的整数值
+        double float_number;
         string *symbol;     // 字符串类型的字符串指针
     } token;                 
     friend class GrammarAnalyzer;   // 友元类：语法分析器

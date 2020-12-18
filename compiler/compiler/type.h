@@ -23,12 +23,32 @@ namespace name_ST {
         RETURN_KW,
         BREAK_KW,
         CONTINUE_KW,
+        INT_KW,
+        DOUBLE_KW,
+        VOID_KW,
+
+        //function keywords
+        GETINT,
+        GETDOUBLE,
+        GETCHAR,
+        PUTINT,
+        PUTCHAR,
+        PUTDOUBLE,
+        PUTSTR,
+        PUTLN,
 
         //LITERAL
         UINT_LITERAL,
         DOUBLE_LITERAL,
         STRING_LITERAL,
         CHAR_LITERAL,
+
+        //basic type
+        /*
+        INT,
+        DOUBLE,
+        VOID,
+        */
 
         //IDENTFILER
         IDENT,
@@ -45,14 +65,16 @@ namespace name_ST {
         GT,
         LE,
         GE,
-        L_PAREN,
-        R_PAREN,
-        L_BRACE,
-        R_BRACE,
+        L_PAREN,//左圆括号(
+        R_PAREN,//右圆括号)
+        L_BRACE,//左花括号{
+        R_BRACE,//右花括号}
+        SINGLE_QUOTE,       // 单引号                      
+        DOUBLE_QUOTE,       // 双引号
         ARROW,
-        COMMA,
-        COLON,
-        SEMICOLON,
+        COMMA, //逗号
+        COLON, //冒号
+        SEMICOLON,//分号
 
         //注释
         COMMENT,
@@ -65,6 +87,7 @@ namespace name_ST {
 // 例如：在处理表达式时，如果里面有错误，跳到 <表达式> 的结尾，则用这里的 EXPRESSION 
 namespace name_EE {
     enum ErrorEnd {
+        
         NORMAL,                 // “正常”，表示没有错误，不需要处理
         PROGRAM,                // 整个程序
         BLOCK,                  // 分程序
@@ -95,8 +118,8 @@ namespace name_EE {
         CONDITION,              // 条件
         RELATION_OPERATOR,      // 关系运算符
         CONDITION_STATEMENT,    // 条件语句
-        DO_WHILE_STATEMENT,     // do-while 语句
-        FOR_STATEMENT,          // for 语句
+        WHILE_STATEMENT,     // do-while 语句
+        BLOCK_STATEMENT,        // block语句 带{}的语句块
         COMPOUND_STATEMENT,     // 复合语句
         READ_STATEMENT,         // read 语句
         WRITE_STATEMENT         // write 语句
@@ -106,11 +129,9 @@ namespace name_EE {
 // 标识符的类型
 namespace name_IT {
     enum IdentifierType {
-        ADDR,
+        ADDR,  //暂时保留
         VAR,
         CONST,
-        ARRAY,
-        PROCEDURE,
         FUNCTION
     };
 }
@@ -119,13 +140,15 @@ namespace name_IT {
 namespace name_BT {
     enum BasicType {
         INTEGER,
-        CHAR
+        DOUBLE,
+        VOID
     };
 }
 
 // 错误类型
 namespace name_ET {
     enum ErrorType {
+        NO_COLON,       //缺少冒号 const a:int=1;
         NO_PERIOD,      // 缺少句点
         ILLEGAL_CHAR,   // 非法字符
         NO_FINISH,      // 希望结束而没有结束
@@ -149,8 +172,10 @@ namespace name_ET {
         NO_BASICTYPE,   // 缺少基本类型
         NO_PROCEDURE,   // 缺少 procedure 关键字
         NO_FUNCTION,    // 缺少 function 关键字
-        NO_LEFTBRACKET, // 缺少左括号
-        NO_RIGHTBRACKET,// 缺少右括号
+        NO_LEFTPAREN, // 缺少左括号
+        NO_RIGHTPAREN,// 缺少右括号
+        NO_LEFTBRACE,
+        NO_RIGHTBRACE,
         CONSTANT,       // 意外的常量标识符
         NO_ASSIGN,      // 缺少赋值符，即希望是赋值语句，实际不是
         NO_VALUE,       // 缺少值

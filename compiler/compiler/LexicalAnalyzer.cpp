@@ -200,10 +200,24 @@ END_SPACE:
 // 读取一个字符串，不含双引号，遇到非法字符或双引号截止，
 //  将截止之前的部分存入 token.symbol，可能为空串
 //  将symbolType 置为 STRING
+//String常量不能直接包含"和/* \ */
 void LexicalAnalyzer::nextString() {
     token.symbol = &strGot; // 令 token.symbol 指向新读的字符串
     strGot.clear();         // 清空字符串以备用       
-    while (ch == 32 || ch == 33 || (ch >= 35 && ch <= 126)) {
+    while (true) {
+        if (ch == '\\') {
+            PEEK;
+            if (ch == '\'' || ch == '\\' || ch == '\r' || ch == '\t' || ch == '\n') {
+                ADD(ch); GET; ADD(ch);
+            }
+            else {
+                break;
+            }
+        }
+        //还不能判断含有\"的情况 ————————搁置——————————————————————————
+        if (ch == '\"') {
+            break;
+        }
         ADD(ch);
         GET;
     }
@@ -216,7 +230,7 @@ void LexicalAnalyzer::nextString() {
         GET;                    // 不要忘了再读一个备用！！！
     }
     else
-        symbolType = STRING;    // 正常，返回 STRING
+        symbolType = STRING_LITERAL;    // 正常，返回 STRING
 }
 
 // 获取下一个 char 类型的字符，
@@ -238,7 +252,7 @@ void LexicalAnalyzer::nextChar() {
     }
 END_SPACE:
     if (isalnum(ch)) {          // 是合法字符，即字母或数字字符
-        symbolType = CHARATER;
+        symbolType = CHAR_LITERAL;
         token.number = ch;      // 将字符的 ASCII 值存入 token.number
     }
     else {                    // 非法字符

@@ -16,9 +16,10 @@ decl_stmt -> let_decl_stmt | const_decl_stmt
 #include <string>
 using namespace std;
 
-#define TOKEN_SYMBOL    (*lexicalAnalyzer.token.symbol)     // string 类型的 token
-#define TOKEN_NUMBER    (lexicalAnalyzer.token.number)      // int 类型的 token
-#define SYMBOL_TYPE     (lexicalAnalyzer.symbolType)        // 符号的 SymbotType 类型值
+#define TOKEN_SYMBOL        (*lexicalAnalyzer.token.symbol)     // string 类型的 token
+#define TOKEN_NUMBER        (lexicalAnalyzer.token.number)      // int 类型的 token
+#define TOKEN_FLOAT_NUMBER  (lexicalAnalyzer.token.float_number)
+#define SYMBOL_TYPE         (lexicalAnalyzer.symbolType)        // 符号的 SymbotType 类型值
 // 定义宏，简化对符号和类型获取    
 
 #define NEXTSYM lexicalAnalyzer.nextSymbol()
@@ -72,8 +73,9 @@ void GrammarAnalyzer::grammarAnalyze() {
     blockAnalyze();
     TEST(ErrorEnd::PROGRAM);
     NEXTSYM;
-    if (SYMBOL_TYPE != SymbolType::FINISH)
+    if (SYMBOL_TYPE != SymbolType::FINISH) //有待考虑
         ERROUT(ErrorType::NO_FINISH);
+    semanticAnalyzer.programEndmapClear();
 END:
     ;
 }
@@ -84,7 +86,7 @@ void GrammarAnalyzer::blockAnalyze() {
     // 全局常量、全局变量、函数定义部分
     while (true) {
         switch (SYMBOL_TYPE) {
-        case SymbolType::LET_KW: //let 声明语句
+        case SymbolType::LET_KW: //let 声明语句  声明包含定义 
             varDeclareAnalyze();
             TEST(ErrorEnd::BLOCK);
             break;
@@ -103,19 +105,19 @@ void GrammarAnalyzer::blockAnalyze() {
     }
 END_DECLARE:
     // 复合语句
-    semanticAnalyzer.funcprocStart();   // 函数/过程开始
+    semanticAnalyzer.funcprocStart();   // 函数开始
     int tempcount = semanticAnalyzer.getTemporaryCount();           // 临时变量计数
     compoundStatementAnalyze();
     tempcount = semanticAnalyzer.getTemporaryCount() - tempcount;   // 临时变量计数
     table.setTempcount(tempcount);                                  // 将临时变量个数填入符号表
-    semanticAnalyzer.funcprocReturn();  // 函数/过程返回
+    semanticAnalyzer.funcprocReturn();  // 函数返回
     TEST(ErrorEnd::BLOCK);
     CLEAR;
 END:
     semanticAnalyzer.blockEndmapClear();
 }
 
-// <常量说明部分> 分析
+// <常量说明部分> 分析 const + constDefineAnalyze()
 void GrammarAnalyzer::constDeclareAnalyze() {
     semanticAnalyzer.constDeclareEndmapInit();
     // const 关键字
@@ -144,17 +146,13 @@ END:
 void GrammarAnalyzer::constDefineAnalyze() {
     semanticAnalyzer.constDeclareEndmapInit();
     // <标识符>
-    string id;      // 标识符
-    BasicType type; // 类型:整数 or 字符
-    int value = 0;  // 常量的值，默认为 0
+    string ident;      // 标识符
+    IdentifierType idType=IdentifierType::CONST; 
+    BasicType bType;
+    int value;
+    //识别标识符
     if (SYMBOL_TYPE != SymbolType::IDENT) {
         ERROUT(ErrorType::NO_IDENTIFIER);
-        SKIP;
-        TEST(ErrorEnd::CONST_DEFINE);
-    }
-    NEXTSYM;
-    if (SYMBOL_TYPE != SymbolType::COLON) {
-        ERROUT(ErrorType::NO_COLON);
         SKIP;
         TEST(ErrorEnd::CONST_DEFINE);
     }
@@ -164,46 +162,59 @@ void GrammarAnalyzer::constDefineAnalyze() {
         TEST(ErrorEnd::CONST_DEFINE);
     }
     else {
-        id = TOKEN_SYMBOL;
+        ident = TOKEN_SYMBOL;
         NEXTSYM;
     }
+    //识别冒号
+    if (SYMBOL_TYPE != SymbolType::COLON) {
+        ERROUT(ErrorType::NO_COLON);
+    }
+    //假装读到了冒号 ：
+    else {
+        NEXTSYM;
+    }
+    basicTypeAnalyze(bType);
+    TEST(ErrorEnd::CONST_DEFINE);
     // 等号
     if (SYMBOL_TYPE != SymbolType::EQ) {
         ERROUT(ErrorType::NO_EQUAL);
     }
-    else
+    else {
         NEXTSYM;
+    }
     // 默认此处有等号，继续
     // <常量>
-    constAnalyze(value, type);
+    constAnalyze(&value, bType);
     TEST(ErrorEnd::CONST_DEFINE);
     // 没有错误，填表
-    semanticAnalyzer.constDefine(id, type, value);
+    semanticAnalyzer.constDefine(ident, bType, v.integer);
     CLEAR;
 END:
     semanticAnalyzer.constDeclareEndmapClear();
 }
 
-// <常量> 分析
+// <常量> 分析  只用分析表达式
 void GrammarAnalyzer::constAnalyze(int& value, BasicType& type) {
     switch (SYMBOL_TYPE) {
-        // 正负号
+
+        // 正负号 int
     case SymbolType::PLUS: case SymbolType::MINUS:
         type = BasicType::INTEGER;
         NEXTSYM;
         unsignedAnalyze(value);
         TEST(ErrorEnd::CONST);
         break;
+
         // 无符号整数
-    case SymbolType::NUMBER:
+    case SymbolType::UINT_LITERAL:
         type = BasicType::INTEGER;
         unsignedAnalyze(value);
         TEST(ErrorEnd::CONST);
         break;
-        // 字符，先识别单引号
-    case SymbolType::SINGLE_QUOTE:
-        type = BasicType::CHAR;
-        charAnalyze(value);
+        //浮点数 double
+    case SymbolType::DOUBLE_LITERAL:
+        type = BasicType::DOUBLE;
+        floatAnalyze(value);
         TEST(ErrorEnd::CONST);
         break;
         // 语法错误
@@ -279,7 +290,7 @@ END:
 // <无符号整数> 分析
 void GrammarAnalyzer::unsignedAnalyze(int& value) {
     // 先判断是不是整数！！！！！！！！！！！！！！！！！！！
-    if (SYMBOL_TYPE != SymbolType::NUMBER) {
+    if (SYMBOL_TYPE != SymbolType::UINT_LITERAL) {
         ERROUT(ErrorType::NO_NUMBER);
     }
     else {
@@ -292,16 +303,29 @@ void GrammarAnalyzer::unsignedAnalyze(int& value) {
     CLEAR;
 }
 
+void GrammarAnalyzer::floatAnalyze(double& value) {
+    if (SYMBOL_TYPE != SymbolType::DOUBLE_LITERAL) {
+        ERROUT(ErrorType::NO_NUMBER);
+    }
+    else {
+        value = TOKEN_FLOAT_NUMBER;
+        if (lexicalAnalyzer.overflow) {
+            WARNOUT(ErrorType::INT_OVERFLOW, stringPlusInt("New value is ", value));
+        }
+        NEXTSYM;
+    }
+    CLEAR;
+}
+
 // <变量说明部分> 分析
 void GrammarAnalyzer::varDeclareAnalyze() {
     semanticAnalyzer.varDeclareEndmapInit();
-    // var 关键字
-    if (SYMBOL_TYPE != SymbolType::VAR) {
+    // let 关键字
+    if (SYMBOL_TYPE != SymbolType::LET_KW) {
         ERROUT(ErrorType::NO_VAR);
     }
     else
         NEXTSYM;
-    // 第一个 <变量说明（定义）> 的处理
     varDefineAnalyze();
     TEST(ErrorEnd::VAR_DECLARE);
     // 识别分号
@@ -310,16 +334,6 @@ void GrammarAnalyzer::varDeclareAnalyze() {
     }
     else
         NEXTSYM;
-    // 后面所有的 <变量说明> 及分号的处理
-    while (SYMBOL_TYPE == SymbolType::IDENTIFIER) {
-        varDefineAnalyze();
-        TEST(ErrorEnd::VAR_DECLARE);
-        if (SYMBOL_TYPE != SymbolType::SEMICOLON) {
-            ERROUT(ErrorType::NO_SEMICOLON, "former var declaration missed a semicolon");
-        }
-        else
-            NEXTSYM;
-    }
     CLEAR;
 END:
     semanticAnalyzer.varDeclareEndmapClear();
@@ -334,7 +348,7 @@ void GrammarAnalyzer::varDefineAnalyze() {
     BasicType bType;                                // 基本类型：整型/字符型
     int limit;                                      //  数组容量限
     // 处理第一个标识符
-    if (SYMBOL_TYPE != SymbolType::IDENTIFIER) {
+    if (SYMBOL_TYPE != SymbolType::IDENT) {
         ERROUT(ErrorType::NO_IDENTIFIER);
         SKIP;
         TEST(ErrorEnd::VAR_DEFINE);
@@ -348,23 +362,6 @@ void GrammarAnalyzer::varDefineAnalyze() {
             names.push_back(TOKEN_SYMBOL);
         NEXTSYM;
     }
-    // 处理以逗号分隔的多个标识符
-    while (SYMBOL_TYPE == SymbolType::COMMA) {
-        NEXTSYM;
-        if (SYMBOL_TYPE == SymbolType::IDENTIFIER) {
-            // 检查是否重定义
-            if (table.isHere(TOKEN_SYMBOL))
-                ERROUT(ErrorType::REDEFINE, TOKEN_SYMBOL);
-            else
-                names.push_back(TOKEN_SYMBOL);
-            NEXTSYM;
-        }
-        else {
-            ERROUT(ErrorType::NO_IDENTIFIER);
-            SKIP;
-            TEST(ErrorEnd::VAR_DEFINE);
-        }
-    }
     // 识别冒号
     if (SYMBOL_TYPE != SymbolType::COLON) {
         ERROUT(ErrorType::NO_COLON);
@@ -372,69 +369,58 @@ void GrammarAnalyzer::varDefineAnalyze() {
     else
         NEXTSYM;
     // 默认有冒号，继续
+    //______
+
+    //_____
     typeAnalyze(idType, bType, limit);
     TEST(ErrorEnd::VAR_DEFINE);
     // 填符号表
-    if (idType == IdentifierType::VAR)
-        semanticAnalyzer.varDefine(names, bType);
-    else
-        semanticAnalyzer.arrayDefine(names, bType, limit);
+    semanticAnalyzer.varDefine(names, bType);
     CLEAR;
 END:
     semanticAnalyzer.varDefineEndmapClear();
 }
 
-// <类型> 分析
-void GrammarAnalyzer::typeAnalyze(IdentifierType& idType, BasicType& bType, int& lim) {
-    if (SYMBOL_TYPE == SymbolType::ARRAY) {     // 数组
-        idType = IdentifierType::ARRAY;
-        NEXTSYM;
-        // 识别左方括号
-        if (SYMBOL_TYPE != SymbolType::LEFT_SQUARE) {
-            ERROUT(ErrorType::NO_LEFTSQUARE);
-        }
-        else
-            NEXTSYM;
-        // 默认有左方括号，继续
-        unsignedAnalyze(lim);
-        TEST(ErrorEnd::TYPE);
-        // 识别右括号
-        if (SYMBOL_TYPE != SymbolType::RIGHT_SQUARE) {
-            ERROUT(ErrorType::NO_RIGHTSQUARE);
-        }
-        else
-            NEXTSYM;
-        // 默认有右括号，继续
-        // 识别 of
-        if (SYMBOL_TYPE != SymbolType::OF) {
-            ERROUT(ErrorType::NO_OF);
-        }
-        else
-            NEXTSYM;
-        // 默认有 of，继续
-        basicTypeAnalyze(bType);
-        TEST(ErrorEnd::TYPE);
-    }
-    else {                                    // 基本类型
-        basicTypeAnalyze(bType);
-        TEST(ErrorEnd::TYPE);
-    }
-    CLEAR;
-END:
-    ;
-}
-
 // <基础类型> 分析
 void GrammarAnalyzer::basicTypeAnalyze(BasicType& bType) {
     switch (SYMBOL_TYPE) {
-    case SymbolType::INTEGER:
+    case SymbolType::INT_KW:
         bType = BasicType::INTEGER;
         NEXTSYM;
         break;
-    case SymbolType::CHAR:
-        bType = BasicType::CHAR;
+    case SymbolType::DOUBLE_KW:
+        bType = BasicType::DOUBLE;
         NEXTSYM;
         break;
+    case SymbolType::VOID_KW:
+        bType = BasicType::VOID;
+        NEXTSYM;
+        break;
+    default:
+        ERROUT(ErrorType::NO_BASICTYPE);
+        SKIP;
+        return;
+        break;
+    }
+    switch (SYMBOL_TYPE) {
+        // 正负号 int
+    case SymbolType::PLUS: case SymbolType::MINUS:
+        NEXTSYM;
+        bType = BasicType::INTEGER;
+        NEXTSYM;
+        break;
+
+        // 无符号整数
+    case SymbolType::UINT_LITERAL:
+        bType = BasicType::INTEGER;
+        NEXTSYM;
+        break;
+        //浮点数 double
+    case SymbolType::DOUBLE_LITERAL:
+        bType = BasicType::DOUBLE;
+        NEXTSYM;
+        break;
+        // 语法错误
     default:
         ERROUT(ErrorType::NO_BASICTYPE);
         SKIP;
